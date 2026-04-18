@@ -1,0 +1,6 @@
+<svg width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="ICON ">
+<path id="Subtract" d="M20.5 6.5C21.3284 6.5 22 7.17157 22 8V19C22 19.8284 21.3284 20.5 20.5 20.5H3.5C2.67157 20.5 2 19.8284 2 19V6.5H20.5ZM16 11.5C15.7239 11.5 15.5 11.7239 15.5 12V13C15.5 13.2761 15.7239 13.5 16 13.5H19C19.2761 13.5 19.5 13.2761 19.5 13V12C19.5 11.7239 19.2761 11.5 19 11.5H16Z" fill="currentColor"/>
+<path id="B" d="M2 5C2 4.17157 2.67157 3.5 3.5 3.5H14.5C15.3284 3.5 16 4.17157 16 5V5H2V5Z" fill="currentColor"/>
+</g>
+</svg>

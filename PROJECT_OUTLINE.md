@@ -1,342 +1,261 @@
-# 加密货币交易所 APP 首页改版 — 项目大纲
+# 加密货币交易所 APP 首页 — 项目大纲
 
-## 项目信息
+本文档面向接手开发者 / AI。先读完本文，再动代码。
 
-| 项目 | 说明 |
+---
+
+## 1. 技术栈
+
+| 项目 | 版本 / 说明 |
+|------|------------|
+| 框架 | **Next.js 16**（App Router）— 重要：API/约定与训练数据可能有出入，写代码前先看 `node_modules/next/dist/docs/` |
+| React | 19 |
+| 语言 | TypeScript（严格模式） |
+| 样式 | Tailwind CSS v4（`@theme inline` token 在 `app/globals.css`） |
+| UI 基础 | shadcn/ui（`components/ui/*`） |
+| 状态 | Zustand + `useShallow` |
+| 主题 | next-themes（暗 / 亮双主题，所有组件必须双主题适配） |
+| 字体 | HarmonyOS Sans SC |
+| 设备 | 移动端优先 375px；容器 `max-w-screen-sm` |
+| 设计稿 | Figma file `VGP1FbEwvpDJa687POA59H` |
+
+---
+
+## 2. 文件结构
+
+```
+app/
+├── layout.tsx              # 字体 + ThemeProvider
+├── page.tsx                # 重定向到 /home
+├── globals.css             # 设计 token + 全局动画 keyframes
+└── home/page.tsx           # 首页（5 种状态全在这里渲染）
+
+components/
+├── common/                 # 通用组件
+│   ├── NavBar.tsx          # 顶部（头像 + 搜索 + 通知 + 客服）
+│   ├── TabBar.tsx          # 底部 5 Tab
+│   ├── MaskedIcon.tsx      # ⭐ 主题感知图标（见 §6）
+│   ├── CoinIcon.tsx        # 币种图标（带品牌色 fallback）
+│   ├── PriceChangeTag.tsx  # 涨跌幅胶囊
+│   ├── CountdownTimer.tsx  # 倒计时
+│   ├── ProgressBar.tsx
+│   └── StatusBar.tsx
+├── home/                   # 首页专属
+│   ├── HeroSection.tsx     # 未登录 Hero（礼盒 + Sign up）
+│   ├── AssetCard.tsx       # 资产卡（可折叠）
+│   ├── QuickActions.tsx    # 金刚区（5 按钮）
+│   ├── MissionBanner.tsx   # 任务进度卡（5 个 variant）
+│   ├── MarketTabs.tsx      # 行情 Tab
+│   ├── MarketTable.tsx     # 行情表格（已 memo）
+│   ├── MarketRow.tsx       # 单行（已 memo）
+│   ├── NewListedSection.tsx
+│   ├── FavoritesEmpty.tsx  # 自选空态选币卡
+│   └── ActivityBanner.tsx
+├── ui/                     # shadcn 组件
+└── theme-provider.tsx, theme-toggle.tsx
+
+lib/
+├── utils.ts                # cn() 工具
+└── figma-assets.ts         # Hero / Mission / Avatar 图片路径常量
+
+mock/
+├── coins.ts                # 币种列表 + 分类筛选函数
+├── missions.ts             # 任务 banner 5 个 variant 的文案/进度配置
+├── user.ts                 # 当前用户
+└── countdown.ts            # 倒计时截止时间
+
+store/appStore.ts           # Zustand 全局状态
+
+public/
+├── icons/*.svg             # 通用 icon（已统一 currentColor）
+├── quick-icons/*.svg       # 金刚区 icon
+├── coin-icons/*.svg|png    # 币种 logo
+├── hero-gift.webp          # 14KB（原 PNG 是 976KB）
+├── mission-gift.webp       # 2KB（原 PNG 是 637KB）
+├── avatar.png              # 头像
+└── coin.png                # Rewards Banner 金币
+```
+
+---
+
+## 3. 状态管理
+
+`store/appStore.ts`（Zustand）— **所有 UI 状态**单一来源。
+
+主要字段：
+- `isLoggedIn`, `hasFavorites`, `favoriteSymbols`
+- `isAssetCollapsed`, `hasCountdown`
+- `homePreviewMode`: `"standard" | "mission"`（控制是否进入任务态）
+- `missionBannerVariant`: `"deposit-pending" | "trade-pending" | "trade-pending-static" | "trade-completed" | "trade-failed" | "trade-failed-badge"`
+- `activeTab`, `activeSubTab`, `activeBottomTab`
+
+### 首页渲染分支（`app/home/page.tsx`）
+
+```
+!isLoggedIn                              → HeroSection + 简化 MarketTable
+isLoggedIn && homePreviewMode==="mission" → MissionBanner + QuickActions + RewardsBanner + Market
+isLoggedIn 默认                          → AssetCard + QuickActions + RewardsBanner + Market
+                                          ↳ activeTab="favorites" && !hasFavorites → FavoritesEmpty
+                                          ↳ activeTab="newListed"                 → NewListedSection
+```
+
+---
+
+## 4. 设计 Token
+
+全部在 `app/globals.css`，`:root`（浅）/ `.dark`（暗）双套：
+
+| Token | 用途 |
+|-------|------|
+| `--brand-primary` | 主橙 #f68f15（双主题相同） |
+| `--bg-primary` / `--bg-card` / `--bg-input` | 页面 / 卡片 / 输入背景 |
+| `--surface-elevated` / `--surface-soft` / `--surface-strong` | 三档浮层 |
+| `--text-primary` / `--text-secondary` / `--text-tertiary` | 三级文字 |
+| `--chart-green` / `--chart-red` | 涨跌色 |
+| `--mission-track` / `--mission-fill` | 任务进度条 |
+| `--divider` | 分割线 |
+
+**Tailwind 用法**：通过 `@theme inline` 映射成 `bg-bg-primary` / `text-text-primary` / `bg-brand-primary` 等类名。**禁止**在 className 里写 `#xxxxxx` 硬编码颜色（CoinIcon 里的 per-coin 品牌色除外，那是币种官方色）。
+
+---
+
+## 5. 双主题原则
+
+任何颜色、图标、图片都必须在亮 / 暗模式下都能看清。具体：
+
+- **颜色** — 用 token，不要写死 `text-white` / `bg-black`，用 `text-text-primary` / `bg-bg-primary`
+- **图标** — 见 §6 MaskedIcon 模式
+- **图片** — 含品牌主色的图片（如 hero-gift）一般通用；纯黑/纯白的需准备两套或加 `dark:` 切换
+
+---
+
+## 6. 图标系统（重要）
+
+### 三种 icon 渲染方式
+
+| 场景 | 用什么 | 示例 |
+|------|--------|------|
+| 单色、需跟随主题色 | `<MaskedIcon src="/icons/x.svg" className="size-4" />` | bell / chevron / time |
+| 多色或带 gradient（不能用 mask） | `<Image src=... />` | nav-hot 火苗、coin logo |
+| 截屏/插画 | `<Image src=... />` 走 next/image 优化 | hero-gift |
+
+### MaskedIcon 工作原理
+
+`components/common/MaskedIcon.tsx` — 用 CSS `mask-image` + `bg-current` 让 svg 形状被父级文字色着色。
+
+```tsx
+<button className="text-text-primary">
+  <MaskedIcon src="/icons/bell.svg" className="size-5" />
+</button>
+```
+
+➡️ 浅色模式黑图标，暗色模式白图标，自动跟随。
+
+### Figma SVG 导出陷阱
+
+Figma 导出的 svg 默认带 `preserveAspectRatio="none"` —— 强制塞进任意容器会变形。**所有 `public/icons/*.svg` 已批量 sed 移除**。新增图标后用：
+
+```bash
+sed -i '' 's/preserveAspectRatio="none" //g' public/icons/your-new.svg
+```
+
+**还要把 `fill="white"` / `fill="var(--fill-0,...)"` 替换为 `fill="currentColor"`**，MaskedIcon 才能正常着色。
+
+---
+
+## 7. 动画
+
+`app/globals.css` 里定义了 5 个全局 keyframe：
+
+| 类名 | 用途 | 周期 |
+|------|------|------|
+| `.float-subtle` | 浮动（Hero 礼盒、Reward 金币） | 3.6s |
+| `.fade-slide-up` | 入场（Sign up 按钮、RewardsBanner） | 0.36s |
+| `.halo-pulse` | 光晕脉冲（Hero 礼盒背后） | 3.6s |
+| `.shimmer-sweep` | CTA 按钮高光扫过（Sign up） | 3.4s 循环 |
+| 内联 `progress-sheen` | 进度条流光 | 2.2s 循环 |
+
+全部走 `@layer utilities`，受全局 `prefers-reduced-motion: reduce` 自动停。新增动画时：
+- **优先用 transform / opacity**（GPU 合成），不要动 width/height/top/left
+- **不要在 fixed/sticky 元素上叠 backdrop-blur**（已踩过坑，会触发滚动重绘）
+
+---
+
+## 8. 性能约定
+
+- **Handler 全部 `useCallback`**（`app/home/page.tsx`），子组件 memo 才生效
+- **MarketTable / MarketRow 都 `memo`**，`favoriteSymbols.includes` 在父级算，传 boolean 给 row
+- **派生数据用 `useMemo`**（marketCoins, favoriteCoins, ...）
+- **Zustand setter 单独 selector**（setter 引用稳定，不和 useShallow 一起拉）
+- **大图必须 webp + 移除 `unoptimized`**，并加 `sizes` 属性让 next/image 选对分辨率
+- **`<img>` 仅在内联 svg 装饰场景用，其他用 `next/image`**
+
+---
+
+## 9. 交互联动备忘
+
+| 入口 | 动作 |
 |------|------|
-| 框架 | Next.js 15 (App Router) |
-| UI 库 | shadcn/ui + Tailwind CSS |
-| 数据 | 全量 Mock（无真实 API） |
-| 设计稿 | Figma `VGP1FbEwvpDJa687POA59H` (APP 首页改版) |
-| 设备 | 移动端优先，375px 宽度 |
-| 主题 | 暗色（黑底） |
-| 字体 | HarmonyOS Sans SC（Regular / Medium / Bold） |
+| 未登录 → Sign up | `setLoggedIn(true)` + `setHomePreviewMode("standard")` |
+| 已登录 → 头像 | 切换暗/亮主题 |
+| 已登录 → Quick Action "Deposit" | 进入任务态 `setMissionBannerVariant("deposit-pending")` |
+| Mission CTA | 推进 variant 状态机：deposit-pending → trade-pending → trade-pending-static → trade-completed → 退出任务态 |
+| Favorites Tab + 空 | 渲染 `FavoritesEmpty`，提交后 `addFavoriteSymbols + setHasFavorites(true)` |
+| 行情 Tab `newListed` | 渲染 `NewListedSection`，过滤掉带 `listingCountdown` 的 |
 
 ---
 
-## Figma 节点索引
+## 10. 怎么加 / 改一个东西
 
-> 所有链接均属于文件 `VGP1FbEwvpDJa687POA59H`（APP 首页改版）
+### 加新图标
+1. 把 svg 放进 `public/icons/`
+2. 移除 `preserveAspectRatio="none"`
+3. fill 全改成 `currentColor`
+4. 用 `<MaskedIcon src="/icons/x.svg" className="size-4 text-text-primary" />`
 
-### 第一种 — P1 首页（未登录）
+### 加新颜色
+1. 在 `app/globals.css` 的 `:root` 和 `.dark` 都定义 `--xxx`
+2. 在 `@theme inline` 加 `--color-xxx: var(--xxx)`
+3. className 用 `bg-xxx` / `text-xxx`
 
-> 默认展示：行情 Tab = **Hot（热门）**，子 Tab = **Spot（现货）**
+### 加新 MissionBanner variant
+1. `store/appStore.ts` MissionBannerVariant 加枚举
+2. `mock/missions.ts` `missionBannerConfigs` 加配置
+3. `components/home/MissionBanner.tsx` `railMap` 加 rail 节点配置
+4. `app/home/page.tsx` `handleMissionAction` 加状态切换
 
-| Node ID | Figma 链接 | 变体说明 |
-|---------|-----------|---------|
-| `68:8747` | [打开](https://www.figma.com/design/VGP1FbEwvpDJa687POA59H/APP%E9%A6%96%E9%A1%B5%E6%94%B9%E7%89%88?node-id=68-8747) | 未登录 — 有倒计时 |
-| `110:7592` | [打开](https://www.figma.com/design/VGP1FbEwvpDJa687POA59H/APP%E9%A6%96%E9%A1%B5%E6%94%B9%E7%89%88?node-id=110-7592) | 未登录 — 无倒计时 |
-
-### 第二种 — P2 首页（已登录，无自选）
-
-| Node ID | Figma 链接 | 变体说明 |
-|---------|-----------|---------|
-| `64:7333` | [打开](https://www.figma.com/design/VGP1FbEwvpDJa687POA59H/APP%E9%A6%96%E9%A1%B5%E6%94%B9%E7%89%88?node-id=64-7333) | 已登录无自选 — Favorites + Spot 展示 |
-| `67:8500` | [打开](https://www.figma.com/design/VGP1FbEwvpDJa687POA59H/APP%E9%A6%96%E9%A1%B5%E6%94%B9%E7%89%88?node-id=67-8500) | 资产区域收起状态 |
-| `215:3527` | [打开](https://www.figma.com/design/VGP1FbEwvpDJa687POA59H/APP%E9%A6%96%E9%A1%B5%E6%94%B9%E7%89%88?node-id=215-3527) | 金刚区（快捷功能）超出屏幕宽度可横滑 |
-
-### 第三种 — P3 首页（已登录，有自选）
-
-| Node ID | Figma 链接 | 变体说明 |
-|---------|-----------|---------|
-| `68:9763` | [打开](https://www.figma.com/design/VGP1FbEwvpDJa687POA59H/APP%E9%A6%96%E9%A1%B5%E6%94%B9%E7%89%88?node-id=68-9763) | 已登录 — Hot 热门榜 · Spot 现货 |
-| `68:10010` | [打开](https://www.figma.com/design/VGP1FbEwvpDJa687POA59H/APP%E9%A6%96%E9%A1%B5%E6%94%B9%E7%89%88?node-id=68-10010) | 已登录 — New Listed 新币榜 · Spot 现货 |
-
-### 第四种 — P4 首页（已登录，入金相关状态）
-
-| Node ID | Figma 链接 | 变体说明 |
-|---------|-----------|---------|
-| `68:10259` | [打开](https://www.figma.com/design/VGP1FbEwvpDJa687POA59H/APP%E9%A6%96%E9%A1%B5%E6%94%B9%E7%89%88?node-id=68-10259) | 已登录 — 未入金，带倒计时 |
-| `68:10536` | [打开](https://www.figma.com/design/VGP1FbEwvpDJa687POA59H/APP%E9%A6%96%E9%A1%B5%E6%94%B9%E7%89%88?node-id=68-10536) | 已入金 — 未交易，有倒计时 |
-| `68:10812` | [打开](https://www.figma.com/design/VGP1FbEwvpDJa687POA59H/APP%E9%A6%96%E9%A1%B5%E6%94%B9%E7%89%88?node-id=68-10812) | 已入金 — 未交易，无倒计时 |
-
-### 第五种 — P5 首页（已登录，已入金，任务状态）
-
-| Node ID | Figma 链接 | 变体说明 |
-|---------|-----------|---------|
-| `68:11085` | [打开](https://www.figma.com/design/VGP1FbEwvpDJa687POA59H/APP%E9%A6%96%E9%A1%B5%E6%94%B9%E7%89%88?node-id=68-11085) | 已登录已入金 — 完成其中1个任务，有倒计时 |
-| `68:11361` | [打开](https://www.figma.com/design/VGP1FbEwvpDJa687POA59H/APP%E9%A6%96%E9%A1%B5%E6%94%B9%E7%89%88?node-id=68-11361) | 已登录已入金 — 失败其中1个任务，有倒计时 |
-| `68:11637` | [打开](https://www.figma.com/design/VGP1FbEwvpDJa687POA59H/APP%E9%A6%96%E9%A1%B5%E6%94%B9%E7%89%88?node-id=68-11637) | 已登录已入金 — 失败其中2个任务，有倒计时 |
+### 加新页面
+1. `app/<route>/page.tsx` 创建（App Router）
+2. 复用 `NavBar` + `TabBar`
+3. 容器套 `max-w-screen-sm` 保持移动端宽度
 
 ---
 
-## 页面内容分析
+## 11. Figma 节点索引
 
-> 全部 5 种均为**首页**不同状态，无独立子页面。
+| 状态 | Node ID |
+|------|---------|
+| 未登录 — 有倒计时 | `68:8747` |
+| 未登录 — 无倒计时 | `110:7592` |
+| 已登录无自选 | `64:7333` |
+| 资产卡折叠 | `67:8500` |
+| 已登录有自选（Hot） | `68:9763` |
+| 已登录有自选（New Listed） | `68:10010` |
+| 任务态 — 未入金 | `68:10259` |
+| 任务态 — 已入金未交易 | `68:10536` |
+| 任务态 — 完成 1 个 | `68:11085` |
+| 任务态 — 失败 1 个 | `68:11361` |
+| 底部 TabBar 5 状态 | `126:2242` |
 
-### 第一种 — 首页（未登录）
-
-- **顶部导航**：Logo（左）+ 语言切换 + 通知图标（右）
-- **Hero 区**：登录 / 注册按钮 + 欢迎文案
-- **倒计时 Banner**：有倒计时变体显示限时活动，无倒计时变体隐藏
-- **金刚区**：存款 / 提款 / 转账 / 买币（4 个图标，固定宽度）
-- **行情 Tabs**：默认 **Hot · Spot**
-- **行情表格**：币种列表（图标 + 名称 + 价格 + 涨跌幅）
-- **底部 TabBar**：首页（激活）
-
-### 第二种 — 首页（已登录，无自选）
-
-- **顶部导航**：头像（已登录）+ 通知图标
-- **资产卡片**：支持展开 / 折叠（折叠变体隐藏金额）
-- **金刚区**：支持超出屏幕宽度时横向滚动
-- **行情 Tabs**：显示 **Favorites（空）+ Spot** 选项
-- **行情表格**：默认展示热门列表（自选为空）
-- **底部 TabBar**：首页（激活）
-
-### 第三种 — 首页（已登录，有自选）
-
-- **顶部导航**：头像（已登录）+ 通知图标
-- **资产卡片**：展开状态，显示总资产金额
-- **金刚区**：固定 4 个按钮
-- **行情 Tabs**：两种变体
-  - Hot · Spot（热门榜）
-  - New Listed · Spot（新币榜）
-- **行情表格**：对应 Tab 下的币种列表
-- **底部 TabBar**：首页（激活）
-
-### 第四种 — 首页（已登录，入金相关任务状态）
-
-- **顶部导航**：头像（已登录）+ 通知图标
-- **任务 Banner**：内嵌于首页，三种变体：
-  - 未入金 + 有倒计时（引导入金）
-  - 已入金未交易 + 有倒计时
-  - 已入金未交易 + 无倒计时
-- **资产卡片**：已入金变体显示资产余额
-- **行情区**：与第三种相同
-
-### 第五种 — 首页（已登录，已入金，任务完成 / 失败状态）
-
-- **顶部导航**：头像（已登录）+ 通知图标
-- **任务 Banner**：内嵌任务进度卡，三种变体（均有倒计时）：
-  - 完成其中 1 个任务
-  - 失败其中 1 个任务
-  - 失败其中 2 个任务
-- **任务项**：每项显示完成 ✓ / 失败 ✗ / 进行中状态
-- **行情区**：与第三种相同
+打开方式：`https://www.figma.com/design/VGP1FbEwvpDJa687POA59H/...?node-id=<id 替换 - 为冒号>`
 
 ---
 
-## 组件拆分
+## 12. 已知约束 / 雷区
 
-### 公共组件（`/components/common/`）
-
-| 组件 | 说明 |
-|------|------|
-| `StatusBar` | 顶部状态栏（时间、信号、电量） |
-| `NavBar` | 顶部导航（Logo / 头像 + 图标） |
-| `TabBar` | 底部导航（5 个 Tab，含激活态） |
-| `CoinIcon` | 币种图标（带颜色背景） |
-| `PriceChangeTag` | 涨跌幅标签（绿 / 红） |
-| `CountdownTimer` | 倒计时组件（时：分：秒） |
-| `ProgressBar` | 任务进度条 |
-
-### 页面级组件（`/components/home/`）
-
-| 组件 | 说明 |
-|------|------|
-| `HeroSection` | 未登录欢迎区（登录/注册按钮） |
-| `AssetCard` | 资产总览卡片，支持展开/折叠 |
-| `QuickActions` | 金刚区，支持横向滚动（内容超屏时） |
-| `ActivityBanner` | 轮播活动横幅 |
-| `MissionBanner` | 首页内嵌任务进度卡（含倒计时、任务项状态） |
-| `MarketTabs` | 行情分类 Tab 栏（含 Favorites / Hot / New Listed 等） |
-| `MarketTable` | 行情表格容器 |
-| `MarketRow` | 单行币种数据 |
-| `FavoritesEmpty` | 自选为空时的占位提示 |
-
----
-
-## 路由结构
-
-```
-/app
-├── layout.tsx          # 全局布局（字体、主题、Provider）
-├── page.tsx            # 重定向到 /home
-└── home
-    └── page.tsx        # 首页（全部 5 种状态均在此页渲染）
-```
-
----
-
-## 状态管理
-
-```typescript
-// /store/appStore.ts (Zustand)
-interface AppState {
-  // 用户状态
-  isLoggedIn: boolean
-  hasDeposited: boolean        // 是否已入金
-  hasTrade: boolean            // 是否已完成交易
-  hasFavorites: boolean        // 是否有自选币种
-
-  // UI 状态
-  isAssetCollapsed: boolean    // 资产卡片是否收起
-  hasCountdown: boolean        // 是否显示倒计时 Banner
-
-  // 任务状态（内嵌于首页）
-  missionStatus: {
-    kyc:     'completed' | 'failed' | 'pending'
-    deposit: 'completed' | 'failed' | 'pending'
-    trade:   'completed' | 'failed' | 'pending'
-  }
-
-  // Tab 状态
-  activeTab: 'favorites' | 'hot' | 'new' | 'topGainers' | 'newListed'
-  activeSubTab: 'spot' | 'futures'
-  activeBottomTab: 'home' | 'markets' | 'trade' | 'futures' | 'wallets'
-}
-
-// 首页渲染逻辑
-// 第一种: !isLoggedIn → HeroSection + 倒计时 Banner（按 hasCountdown 控制）
-// 第二种: isLoggedIn && !hasFavorites → AssetCard（可折叠）+ 金刚区（可横滑）
-// 第三种: isLoggedIn && hasFavorites → MarketTabs 含自选数据
-// 第四种: isLoggedIn && 入金任务驱动 → MissionBanner（未入金/已入金·有无倒计时）
-// 第五种: isLoggedIn && hasDeposited → MissionBanner（任务完成/失败进度）
-```
-
----
-
-## Mock 数据结构
-
-```typescript
-// /mock/coins.ts
-export const mockCoins = [
-  { symbol: 'BTC',  name: 'Bitcoin',  price: 101023.66, change: +1.56, volume: '2.4B' },
-  { symbol: 'ETH',  name: 'Ethereum', price: 3284.52,   change: +2.31, volume: '1.1B' },
-  { symbol: 'BNB',  name: 'BNB',      price: 718.33,    change: -0.87, volume: '456M' },
-  { symbol: 'SOL',  name: 'Solana',   price: 198.44,    change: +4.12, volume: '892M' },
-  { symbol: 'XRP',  name: 'XRP',      price: 2.34,      change: +0.65, volume: '334M' },
-  { symbol: 'SHIB', name: 'Shiba Inu',price: 0.0000284, change: -1.23, volume: '212M' },
-  { symbol: 'DOGE', name: 'Dogecoin', price: 0.3821,    change: +3.44, volume: '678M' },
-  { symbol: 'LTC',  name: 'Litecoin', price: 128.77,    change: -0.54, volume: '145M' },
-]
-
-// /mock/user.ts
-export const mockUser = {
-  totalAssets: 10285.32,
-  dailyEarnings: +128.45,
-  dailyEarningsPercent: +1.26,
-  currency: 'USD',
-}
-
-// /mock/missions.ts
-export const mockMissions = [
-  { id: 'kyc',   title: '完成身份认证',   reward: 10,  completed: true,  progress: 100 },
-  { id: 'deposit', title: '首次存款',     reward: 50,  completed: false, progress: 0   },
-  { id: 'trade', title: '完成首笔交易',   reward: 20,  completed: false, progress: 0   },
-]
-
-// /mock/countdown.ts
-export const missionDeadline = new Date(Date.now() + 72 * 60 * 60 * 1000) // 72 小时后
-```
-
----
-
-## 设计 Token（Tailwind 配置）
-
-```javascript
-// tailwind.config.ts
-theme: {
-  extend: {
-    colors: {
-      'brand-primary':  '#f68f15',  // 主橙色
-      'bg-primary':     '#000000',  // 页面背景
-      'bg-card':        '#121211',  // 卡片背景
-      'bg-input':       '#1a1a18',  // 输入框/次级背景
-      'text-primary':   '#ffffff',  // 主文字
-      'text-secondary': '#737370',  // 次级文字
-      'text-tertiary':  '#4a4a47',  // 三级文字
-      'chart-green':    '#2ebe65',  // 涨（绿）
-      'chart-red':      '#f24040',  // 跌（红）
-      'divider':        '#1f1f1d',  // 分割线
-    },
-    fontFamily: {
-      sans: ['HarmonyOS Sans SC', 'PingFang SC', 'sans-serif'],
-    },
-    fontSize: {
-      'xs':  ['10px', { lineHeight: '14px' }],
-      'sm':  ['12px', { lineHeight: '16px' }],
-      'base':['14px', { lineHeight: '20px' }],
-      'lg':  ['16px', { lineHeight: '22px' }],
-      'xl':  ['18px', { lineHeight: '24px' }],
-      '2xl': ['30px', { lineHeight: '38px' }],
-    },
-  }
-}
-```
-
----
-
-## 交互要求
-
-| 交互 | 说明 |
-|------|------|
-| 登录/注册 | 点击按钮切换 isLoggedIn 状态（无弹窗，直接状态变更用于演示） |
-| 存款 | 点击"存款"按钮切换 hasDeposited 状态 |
-| Tab 切换 | 行情 Tab 点击切换，带下划线动画 |
-| 底部 TabBar | 点击切换页面，图标 + 文字高亮 |
-| 任务中心入口 | 点击活动 Banner 或特定按钮跳转 `/mission` |
-| 行情表格 | 按涨跌幅/价格排序（纯前端排序） |
-| 自选收藏 | 点击星标切换 hasFavorites，影响自选 Tab 显示 |
-| 倒计时 | 实时倒计时（useEffect + setInterval） |
-| 轮播 Banner | 自动轮播（3 秒），支持手动滑动 |
-
----
-
-## 实施步骤（12 步）
-
-```
-Step 01  初始化 Next.js 15 项目（App Router + TypeScript）
-Step 02  配置 Tailwind CSS + 注入设计 Token
-Step 03  安装并配置 shadcn/ui（Button, Card, Tabs, Progress）
-Step 04  配置 Zustand 状态管理，定义完整 AppState
-Step 05  创建所有 Mock 数据文件
-Step 06  实现公共组件（StatusBar, NavBar, TabBar, CoinIcon, PriceChangeTag）
-Step 07  实现 CountdownTimer + ProgressBar 工具组件
-Step 08  实现首页第一种（未登录）— HeroSection + 倒计时 Banner + 行情表格
-Step 09  实现首页第二种（已登录无自选）— AssetCard 折叠 + 金刚区横滑
-Step 10  实现首页第三种（已登录有自选）— Favorites Tab + Hot/New Listed 切换
-Step 11  实现首页第四/五种 — MissionBanner 内嵌任务卡（入金状态 + 任务完成/失败变体）
-Step 12  端到端联调：全状态切换 → UI 联动验证 → 响应式收尾
-```
-
----
-
-## 文件目录预览
-
-```
-ai-project/
-├── PROJECT_OUTLINE.md          ← 本文件
-├── app/
-│   ├── layout.tsx
-│   ├── page.tsx
-│   └── home/
-│       └── page.tsx
-├── components/
-│   ├── common/
-│   │   ├── StatusBar.tsx
-│   │   ├── NavBar.tsx
-│   │   ├── TabBar.tsx
-│   │   ├── CoinIcon.tsx
-│   │   ├── PriceChangeTag.tsx
-│   │   ├── CountdownTimer.tsx
-│   │   └── ProgressBar.tsx
-│   └── home/
-│       ├── HeroSection.tsx
-│       ├── AssetCard.tsx
-│       ├── QuickActions.tsx
-│       ├── ActivityBanner.tsx
-│       ├── MissionBanner.tsx
-│       ├── MarketTabs.tsx
-│       ├── MarketTable.tsx
-│       ├── MarketRow.tsx
-│       └── FavoritesEmpty.tsx
-├── store/
-│   └── appStore.ts
-├── mock/
-│   ├── coins.ts
-│   ├── user.ts
-│   ├── missions.ts
-│   └── countdown.ts
-└── tailwind.config.ts
-```
+1. **Next.js 16** — 训练数据里的 Next 13/14/15 写法可能不再适用，先查 `node_modules/next/dist/docs/`
+2. **shadcn 组件不要乱改样式** — 通过 className 覆盖，不直接改 `components/ui/*`
+3. **CoinIcon 里的 per-coin 颜色硬编码是有意的**（币种官方色），不要"重构"成 token
+4. **next/image 禁用 `unoptimized`** —— 除非确实必要（如纯静态小 icon 不想走优化）
+5. **不要在按钮里嵌按钮** — RewardsBanner 已踩过 hydration 坑，所以拆了 button / div 两套
+6. **CSS mask + 多色 svg 不兼容** — 多色 / gradient svg 必须 `<Image>` 渲染，不能 MaskedIcon
