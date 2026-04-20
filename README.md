@@ -161,7 +161,7 @@ npm install
 npm run dev
 
 # 浏览器访问
-open http://localhost:3000
+open http://localhost:6001
 ```
 
 页面会自动重定向到 `/home`。在右上角头像点击可切换暗/亮主题。
